@@ -4,7 +4,7 @@ import os
 import asyncio
 from pyrogram import Client, filters, __version__
 from pyrogram.enums import ParseMode
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated
 
 from bot import Bot
@@ -17,18 +17,18 @@ SECONDS = TIME
 
 @Bot.on_message(filters.command('start') & filters.private & subscribed)
 async def start_command(client: Client, message: Message):
-    id = message.from_user.id
-    if not await present_user(id):
+    user_id = message.from_user.id
+    if not await present_user(user_id):
         try:
-            await add_user(id)
-        except:
-            pass
+            await add_user(user_id)
+        except Exception as e:
+            print(f"Error adding user: {e}")
 
     text = message.text
     if len(text) > 7:
         try:
             base64_string = text.split(" ", 1)[1]
-        except:
+        except IndexError:
             return
 
         string = await decode(base64_string)
@@ -38,21 +38,25 @@ async def start_command(client: Client, message: Message):
             try:
                 start = int(int(argument[1]) / abs(client.db_channel.id))
                 end = int(int(argument[2]) / abs(client.db_channel.id))
-            except:
+            except Exception as e:
+                print(f"Error processing arguments: {e}")
                 return
             ids = range(start, end + 1) if start <= end else list(range(start, end - 1, -1))
         elif len(argument) == 2:
             try:
                 ids = [int(int(argument[1]) / abs(client.db_channel.id))]
-            except:
+            except Exception as e:
+                print(f"Error processing arguments: {e}")
                 return
         else:
             ids = []
 
+        await message.react(emoji="🔥")  # React with fire emoji
         temp_msg = await message.reply("ᴡᴀɪᴛ ʙʀᴏᴏ...")
         try:
             messages = await get_messages(client, ids)
-        except:
+        except Exception as e:
+            print(f"Error fetching messages: {e}")
             await message.reply_text("Something went wrong..!")
             return
         await temp_msg.delete()
@@ -83,8 +87,8 @@ async def start_command(client: Client, message: Message):
                     protect_content=PROTECT_CONTENT
                 )
                 snt_msgs.append(snt_msg)
-            except:
-                pass
+            except Exception as e:
+                print(f"Error copying message: {e}")
 
         if SECONDS > 0:
             notification_msg = await message.reply(
@@ -95,8 +99,8 @@ async def start_command(client: Client, message: Message):
             for snt_msg in snt_msgs:
                 try:
                     await snt_msg.delete()
-                except:
-                    pass
+                except Exception as e:
+                    print(f"Error deleting message: {e}")
             await notification_msg.edit("<b>Your file has been successfully deleted! 😼</b>")
     else:
         reply_markup = InlineKeyboardMarkup(
@@ -108,6 +112,7 @@ async def start_command(client: Client, message: Message):
             ]
         )
         try:
+            await message.react(emoji="🔥")  # React with fire emoji
             await message.reply_photo(
                 photo=START_PIC,
                 caption=START_MSG.format(
@@ -120,7 +125,7 @@ async def start_command(client: Client, message: Message):
                 reply_markup=reply_markup,
             )
         except Exception as e:
-            print(e)
+            print(f"Error sending start photo: {e}")
 
 @Bot.on_message(filters.command('start') & filters.private)
 async def not_joined(client: Client, message: Message):
@@ -146,6 +151,7 @@ async def not_joined(client: Client, message: Message):
     except IndexError:
         pass
 
+    await message.react(emoji="🔥")  # React with fire emoji
     await message.reply_photo(
         photo=FORCE_PIC,
         caption=FORCE_MSG.format(
@@ -157,55 +163,3 @@ async def not_joined(client: Client, message: Message):
         ),
         reply_markup=InlineKeyboardMarkup(buttons),
     )
-
-@Bot.on_message(filters.command('users') & filters.private & filters.user(ADMINS))
-async def get_users(client: Bot, message: Message):
-    msg = await client.send_message(chat_id=message.chat.id, text=WAIT_MSG)
-    users = await full_userbase()
-    await msg.edit(f"{len(users)} users are using this bot")
-
-@Bot.on_message(filters.private & filters.command('broadcast') & filters.user(ADMINS))
-async def send_text(client: Bot, message: Message):
-    if message.reply_to_message:
-        query = await full_userbase()
-        broadcast_msg = message.reply_to_message
-        total = 0
-        successful = 0
-        blocked = 0
-        deleted = 0
-        unsuccessful = 0
-
-        pls_wait = await message.reply("<i>Broadcasting Message.. This will Take Some Time</i>")
-        for chat_id in query:
-            try:
-                await broadcast_msg.copy(chat_id)
-                successful += 1
-            except FloodWait as e:
-                await asyncio.sleep(e.x)
-                await broadcast_msg.copy(chat_id)
-                successful += 1
-            except UserIsBlocked:
-                await del_user(chat_id)
-                blocked += 1
-            except InputUserDeactivated:
-                await del_user(chat_id)
-                deleted += 1
-            except:
-                unsuccessful += 1
-                pass
-            total += 1
-
-        status = (
-            f"<b><u>Broadcast Completed</u>\n\n"
-            f"Total Users: <code>{total}</code>\n"
-            f"Successful: <code>{successful}</code>\n"
-            f"Blocked Users: <code>{blocked}</code>\n"
-            f"Deleted Accounts: <code>{deleted}</code>\n"
-            f"Unsuccessful: <code>{unsuccessful}</code></b>"
-        )
-
-        return await pls_wait.edit(status)
-    else:
-        msg = await message.reply(REPLY_ERROR)
-        await asyncio.sleep(8)
-        await msg.delete()
